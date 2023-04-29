@@ -3,12 +3,13 @@ package mvcc
 import (
 	"sync"
 	"sync/atomic"
+
+	"github.com/avinassh/mvcc-go/lockless"
 )
 
 type row struct {
-	beginTs uint64
-	endTs   uint64
-	tx      bool
+	beginTs lockless.Timestamp
+	endTs   lockless.Timestamp
 	value   int
 	next    *row
 	*sync.Mutex
@@ -31,7 +32,7 @@ func (r *row) addNext(update *row) bool {
 }
 
 type DB struct {
-	rows    map[string]*row
+	rows    map[string]*lockless.Head[int]
 	txMap   map[uint64]*Tx
 	counter uint64
 	*sync.Mutex
@@ -39,7 +40,7 @@ type DB struct {
 
 func NewDB() *DB {
 	return &DB{
-		rows:    make(map[string]*row),
+		rows:    make(map[string]*lockless.Head[int]),
 		txMap:   make(map[uint64]*Tx),
 		counter: 0,
 		Mutex:   &sync.Mutex{},
@@ -58,9 +59,10 @@ func (db *DB) Update(fn func(*Tx) error) error {
 	return t.Commit()
 }
 
-func (db *DB) getRow(rowId string) (*row, error) {
+func (db *DB) getRow(rowId string) (*lockless.Head[int], error) {
 	db.Lock()
 	defer db.Unlock()
+
 	r, ok := db.rows[rowId]
 	if !ok {
 		return nil, ErrNotFound
@@ -68,7 +70,7 @@ func (db *DB) getRow(rowId string) (*row, error) {
 	return r, nil
 }
 
-func (db *DB) insertRow(rowId string) (*row, error) {
+func (db *DB) insertRow(rowId string) (*lockless.Head[int], error) {
 	db.Lock()
 	defer db.Unlock()
 	_, ok := db.rows[rowId]
@@ -99,4 +101,18 @@ func (db *DB) addTx(txId uint64, tx *Tx) {
 	db.Lock()
 	defer db.Unlock()
 	db.txMap[txId] = tx
+}
+
+func (db *DB) getTx(txId uint64) (*Tx, bool) {
+	db.Lock()
+	defer db.Unlock()
+	tx, ok := db.txMap[txId]
+	return tx, ok
+}
+
+func (db *DB) getTxState(txId uint64) (TxState, bool) {
+	db.Lock()
+	defer db.Unlock()
+	tx, ok := db.txMap[txId]
+	return tx.state, ok
 }

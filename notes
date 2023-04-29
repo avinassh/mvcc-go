@@ -1,0 +1,6 @@
+### Tests
+
+- Concurrent inserts might fail x_x
+- Tx Active, inserted a row. Can it see it? Can other tx see it?
+- Can Tx see multiple versions of a row?
+- What happens if I try to insert same key twice, in a transaction
